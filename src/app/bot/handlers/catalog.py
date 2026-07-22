@@ -15,7 +15,7 @@ from app.bot.callbacks import (
     SectionCb,
     UgsnCb,
 )
-from app.domain.services import catalog, favorites, search
+from app.domain.services import catalog, favorites, profile, search
 
 router = Router(name="catalog")
 
@@ -94,9 +94,12 @@ async def show_direction_programs(
         await callback.answer("Нет программ по этому направлению", show_alert=True)
         return
 
+    scores = await profile.get_scores(session, callback.from_user.id)
+
     def label(program) -> str:
+        prefix = profile.status_prefix(profile.evaluate(program, scores)[0]) if scores else ""
         score = next((f" · {f.pass_score}" for f in program.forms if f.pass_score), "")
-        return f"{program.university.short_name}{score}"
+        return f"{prefix}{program.university.short_name}{score}"
 
     def page_cb(page: int) -> DirProgsCb:
         return DirProgsCb(dir_id=callback_data.dir_id, page=page, ege=callback_data.ege)
@@ -121,7 +124,9 @@ async def show_program(callback: CallbackQuery, callback_data: ProgCb, session: 
         await callback.answer("Программа не найдена", show_alert=True)
         return
     is_fav = await favorites.is_favorite(session, callback.from_user.id, "program", program.id)
+    scores = await profile.get_scores(session, callback.from_user.id)
+    chance = profile.evaluate(program, scores) if scores else None
     await callback.message.edit_text(
-        texts.program_card(program), reply_markup=kb.program_card_kb(program, is_fav)
+        texts.program_card(program, chance), reply_markup=kb.program_card_kb(program, is_fav)
     )
     await callback.answer()

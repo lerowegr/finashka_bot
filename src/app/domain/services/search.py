@@ -75,7 +75,7 @@ async def programs_by_direction_and_subjects(
     items = (
         (
             await session.execute(
-                base.options(selectinload(m.Program.forms))
+                base.options(selectinload(m.Program.forms), selectinload(m.Program.exams))
                 .join(m.University, m.Program.university_id == m.University.id)
                 .order_by(m.University.avg_score.desc().nulls_last())
                 .offset(page * per_page)

@@ -3,6 +3,7 @@
 from html import escape
 
 from app.db import models as m
+from app.domain.services.profile import STATUS_EMOJI, STATUS_WORD
 from app.scraper.schemas import FORM_RU, LEVEL_RU
 
 MAIN_MENU = (
@@ -88,7 +89,40 @@ def university_card(vuz: m.University) -> str:
     return "\n".join(parts)
 
 
-def program_card(program: m.Program) -> str:
+def format_chance(status: str, total: int | None, pass_score: int | None) -> str | None:
+    """Строка «ваши шансы» для карточки программы, или None если оценить нельзя."""
+    if status == "unknown":
+        return None
+    emoji = STATUS_EMOJI[status]
+    word = STATUS_WORD[status]
+    if status == "missing":
+        return f"🎯 Ваши шансы: {emoji} {word}"
+    if total is not None and pass_score is not None:
+        return f"🎯 Ваши шансы: {emoji} {word} (ваши {total} vs проходной {pass_score})"
+    return f"🎯 Ваши шансы: {emoji} {word}"
+
+
+def profile_text(overview: list[tuple[m.ExamSubject, int | None]]) -> str:
+    lines = ["📊 <b>Мои баллы ЕГЭ</b>", ""]
+    total = 0
+    any_set = False
+    for subject, score in overview:
+        if score is not None:
+            lines.append(f"• {escape(subject.name)}: <b>{score}</b>")
+            total += score
+            any_set = True
+    if any_set:
+        lines.append(f"\nСумма заданных: <b>{total}</b>")
+    else:
+        lines.append("Баллы ещё не заданы.")
+    lines.append(
+        "\nНажмите на предмет, чтобы указать балл. "
+        "По ним в карточках программ показываются ваши шансы поступления."
+    )
+    return "\n".join(lines)
+
+
+def program_card(program: m.Program, chance: tuple[str, int | None, int | None] | None = None) -> str:
     direction = program.direction
     parts = [
         f"📚 <b>{escape(direction.name)}</b>",
@@ -131,6 +165,15 @@ def program_card(program: m.Program) -> str:
         if form.paid_only:
             block.append("Приём только на платной основе")
         parts.append("\n".join(block))
+
+    if chance is None:
+        parts.append(
+            "\n🎯 Укажите свои баллы ЕГЭ (кнопка «📊 Мои баллы» в меню), чтобы видеть шансы."
+        )
+    else:
+        line = format_chance(*chance)
+        if line:
+            parts.append("\n" + line)
 
     parts.append("\n<i>Данные: tabiturient.ru</i>")
     return "\n".join(parts)

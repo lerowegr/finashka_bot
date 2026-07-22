@@ -71,5 +71,13 @@ class FavToggleCb(CallbackData, prefix="ft"):
     item_id: int
 
 
+class ProfileCb(CallbackData, prefix="prof"):
+    action: str  # 'clear'
+
+
+class ScoreSubjCb(CallbackData, prefix="scs"):
+    subject_id: int
+
+
 class NoopCb(CallbackData, prefix="noop"):
     pass

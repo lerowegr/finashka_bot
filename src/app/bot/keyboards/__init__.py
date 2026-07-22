@@ -15,9 +15,11 @@ from app.bot.callbacks import (
     LevelCb,
     MenuCb,
     NoopCb,
+    ProfileCb,
     ProgCb,
     RegionCb,
     RegionsCb,
+    ScoreSubjCb,
     SectionCb,
     SubjToggleCb,
     UgsnCb,
@@ -60,9 +62,31 @@ def _fav_text(is_fav: bool) -> str:
 def main_menu_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.row(InlineKeyboardButton(text="🎓 По уровню образования", callback_data=MenuCb(to="catalog").pack()))
+    kb.row(InlineKeyboardButton(text="📊 Мои баллы ЕГЭ", callback_data=MenuCb(to="profile").pack()))
     kb.row(InlineKeyboardButton(text="💭 Поиск по предметам ЕГЭ", callback_data=MenuCb(to="ege").pack()))
     kb.row(InlineKeyboardButton(text="🏛 ВУЗы по регионам", callback_data=MenuCb(to="regions").pack()))
     kb.row(InlineKeyboardButton(text="⭐ Избранное", callback_data=MenuCb(to="favs").pack()))
+    return kb.as_markup()
+
+
+def profile_kb(overview: list[tuple[m.ExamSubject, int | None]]) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for subject, score in overview:
+        mark = f": {score}" if score is not None else ": —"
+        kb.row(
+            InlineKeyboardButton(
+                text=f"{subject.name}{mark}",
+                callback_data=ScoreSubjCb(subject_id=subject.id).pack(),
+            )
+        )
+    kb.row(InlineKeyboardButton(text="🗑 Очистить всё", callback_data=ProfileCb(action="clear").pack()))
+    kb.row(_home())
+    return kb.as_markup()
+
+
+def cancel_score_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.row(InlineKeyboardButton(text="◀ Назад к баллам", callback_data=MenuCb(to="profile").pack()))
     return kb.as_markup()
 
 

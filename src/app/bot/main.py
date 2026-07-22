@@ -6,7 +6,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.bot.handlers import catalog, ege, favorites, start, universities
+from app.bot.handlers import catalog, ege, favorites, profile, start, universities
 from app.bot.middlewares import DbSessionMiddleware, UserMiddleware, on_error
 from app.config import settings
 from app.logsetup import setup_logging
@@ -23,6 +23,7 @@ def build_dispatcher() -> Dispatcher:
         observer.middleware(UserMiddleware())
 
     dp.include_router(start.router)
+    dp.include_router(profile.router)
     dp.include_router(catalog.router)
     dp.include_router(ege.router)
     dp.include_router(universities.router)
