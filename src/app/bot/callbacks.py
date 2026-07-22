@@ -71,6 +71,15 @@ class FavToggleCb(CallbackData, prefix="ft"):
     item_id: int
 
 
+class CompareStartCb(CallbackData, prefix="cmps"):
+    a: int  # первый вуз выбран, показать кандидатов для второго
+
+
+class CompareCb(CallbackData, prefix="cmp"):
+    a: int
+    b: int
+
+
 class ProfileCb(CallbackData, prefix="prof"):
     action: str  # 'clear'
 

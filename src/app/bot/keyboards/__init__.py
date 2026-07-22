@@ -13,6 +13,8 @@ from app.bot.callbacks import (
     EgeSearchCb,
     FavToggleCb,
     LevelCb,
+    CompareCb,
+    CompareStartCb,
     MenuCb,
     NoopCb,
     ProfileCb,
@@ -282,7 +284,10 @@ def university_card_kb(university: m.University, is_fav: bool) -> InlineKeyboard
         InlineKeyboardButton(
             text=_fav_text(is_fav),
             callback_data=FavToggleCb(kind="university", item_id=university.id).pack(),
-        )
+        ),
+        InlineKeyboardButton(
+            text="⚖ Сравнить", callback_data=CompareStartCb(a=university.id).pack()
+        ),
     )
     if university.region_id:
         kb.row(
@@ -291,6 +296,34 @@ def university_card_kb(university: m.University, is_fav: bool) -> InlineKeyboard
                 callback_data=RegionCb(region_id=university.region_id, page=0).pack(),
             )
         )
+    kb.row(_home())
+    return kb.as_markup()
+
+
+def compare_candidates_kb(a_id: int, candidates: list[m.University]) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for u in candidates:
+        kb.row(
+            InlineKeyboardButton(
+                text=f"🅱 {u.short_name}", callback_data=CompareCb(a=a_id, b=u.id).pack()
+            )
+        )
+    kb.row(InlineKeyboardButton(text="◀ Назад", callback_data=VuzCb(univ_id=a_id).pack()))
+    kb.row(_home())
+    return kb.as_markup()
+
+
+def compare_result_kb(a_id: int, b_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.row(
+        InlineKeyboardButton(text="🅰 О вузе", callback_data=VuzCb(univ_id=a_id).pack()),
+        InlineKeyboardButton(text="🅱 О вузе", callback_data=VuzCb(univ_id=b_id).pack()),
+    )
+    kb.row(
+        InlineKeyboardButton(
+            text="⚖ Другой вуз для сравнения", callback_data=CompareStartCb(a=a_id).pack()
+        )
+    )
     kb.row(_home())
     return kb.as_markup()
 

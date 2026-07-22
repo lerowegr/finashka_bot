@@ -12,8 +12,8 @@ from app.domain.services import catalog, search, universities
 
 def test_dispatcher_builds_without_token():
     dp = build_dispatcher()
-    # все шесть роутеров подключены
-    assert len(dp.sub_routers) == 6
+    # все семь роутеров подключены
+    assert len(dp.sub_routers) == 7
 
 
 def test_static_keyboards_build():

@@ -142,6 +142,23 @@ def profile_text(overview: list[tuple[m.ExamSubject, int | None]]) -> str:
     return "\n".join(lines)
 
 
+def comparison_text(a: m.University, b: m.University, rows: list[dict]) -> str:
+    lines = [
+        "⚖ <b>Сравнение вузов</b>",
+        f"🅰 {escape(a.short_name)}",
+        f"🅱 {escape(b.short_name)}",
+        "",
+    ]
+    for row in rows:
+        mark_a = " ✅" if row["better"] == "a" else ""
+        mark_b = " ✅" if row["better"] == "b" else ""
+        lines.append(
+            f"{row['icon']} {row['label']}: "
+            f"🅰 {escape(str(row['a']))}{mark_a} · 🅱 {escape(str(row['b']))}{mark_b}"
+        )
+    return "\n".join(lines)
+
+
 def program_card(program: m.Program, chance: tuple[str, int | None, int | None] | None = None) -> str:
     direction = program.direction
     parts = [
