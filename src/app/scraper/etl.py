@@ -263,7 +263,7 @@ class Etl:
 
     # ---------- обходы ----------
 
-    async def run_light(self, limit_vuz: int | None = None) -> None:
+    async def run_light(self, limit_vuz: int | None = None) -> int:
         """Вузы: about + общежитие + список программ. ~3 запроса на вуз."""
         run_id = await self._start_run("light")
         ok = failed = 0
@@ -286,8 +286,9 @@ class Etl:
                     log.exception("вуз %s пропущен: %s", slug, exc)
         finally:
             await self._finish_run(run_id, ok, failed)
+        return run_id
 
-    async def run_np(self, limit: int | None = None) -> None:
+    async def run_np(self, limit: int | None = None) -> int:
         """Агрегаты направлений по России (мин/средний балл)."""
         run_id = await self._start_run("np")
         ok = failed = 0
@@ -310,8 +311,9 @@ class Etl:
                     log.exception("направление %s пропущено", np_id)
         finally:
             await self._finish_run(run_id, ok, failed)
+        return run_id
 
-    async def run_full(self, limit: int | None = None) -> None:
+    async def run_full(self, limit: int | None = None) -> int:
         """Карточки программ: стоимость, места, квоты. Самый долгий обход."""
         run_id = await self._start_run("full")
         ok = failed = 0
@@ -370,3 +372,4 @@ class Etl:
                     log.exception("карточка %s пропущена", program_id)
         finally:
             await self._finish_run(run_id, ok, failed)
+        return run_id

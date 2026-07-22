@@ -90,17 +90,54 @@ def schedule() -> None:
 
     from app.scraper.etl import Etl
 
+    from app.notifier import dispatch_change_notifications
+
     async def nightly(etl: Etl) -> None:
-        await etl.run_light()
+        light_id = await etl.run_light()
         await etl.run_np()
+        await dispatch_change_notifications([light_id])
+
+    async def weekly_full(etl: Etl) -> None:
+        full_id = await etl.run_full()
+        await dispatch_change_notifications([full_id])
 
     async def main() -> None:
         etl = Etl()
         scheduler = AsyncIOScheduler()
         scheduler.add_job(nightly, "cron", hour=3, minute=0, args=[etl])
-        scheduler.add_job(etl.run_full, "cron", day_of_week="sun", hour=1, minute=0)
+        scheduler.add_job(weekly_full, "cron", day_of_week="sun", hour=1, minute=0, args=[etl])
         scheduler.start()
         await asyncio.Event().wait()  # работает, пока не остановят
+
+    _run(main())
+
+
+@app.command()
+def notify_changes(
+    run: int = typer.Option(None, help="ID обхода; по умолчанию последний завершённый")
+) -> None:
+    """Разослать уведомления об изменениях в избранных программах."""
+    from sqlalchemy import desc, select
+
+    from app.db import models as m
+    from app.db.engine import session_factory
+    from app.notifier import dispatch_change_notifications
+
+    async def main() -> None:
+        run_ids = [run]
+        if run is None:
+            async with session_factory() as session:
+                latest = (
+                    await session.execute(
+                        select(m.ScrapeRun.id)
+                        .where(m.ScrapeRun.finished_at.is_not(None))
+                        .order_by(desc(m.ScrapeRun.id))
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                run_ids = [latest] if latest else []
+        count = await dispatch_change_notifications(run_ids)
+        typer.echo(f"Уведомлений отправлено: {count}")
 
     _run(main())
 
