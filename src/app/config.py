@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -25,6 +26,14 @@ class Settings(BaseSettings):
     user_agent: str = (
         "Mozilla/5.0 (compatible; FinashkaBot/2.0; +https://t.me/finashka_abiturient_bot)"
     )
+
+    @field_validator("admin_chat_id", mode="before")
+    @classmethod
+    def _blank_to_none(cls, value):
+        # пустой ADMIN_CHAT_ID= в .env означает «не задано», а не ошибку
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
 
 
 settings = Settings()
