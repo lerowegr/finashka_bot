@@ -1,0 +1,37 @@
+[project]
+name = "finashka-bot"
+version = "2.0.0"
+description = "Telegram-бот для абитуриентов: направления, вузы и программы с актуальными данными tabiturient.ru"
+requires-python = ">=3.12"
+dependencies = [
+    "aiogram>=3.13",
+    "SQLAlchemy>=2.0",
+    "aiosqlite>=0.20",
+    "alembic>=1.13",
+    "httpx[http2]>=0.27",
+    "selectolax>=0.3.21",
+    "tenacity>=8.3",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "APScheduler>=3.10",
+    "cachetools>=5.3",
+    "typer>=0.12",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
