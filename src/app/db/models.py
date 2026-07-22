@@ -53,6 +53,7 @@ class University(Base):
 
     region: Mapped["Region | None"] = relationship(lazy="joined")
     faculties: Mapped[list["Faculty"]] = relationship(back_populates="university")
+    open_days: Mapped[list["OpenDay"]] = relationship(back_populates="university")
 
 
 class Faculty(Base):
@@ -213,6 +214,22 @@ class ScrapeRun(Base):
     pages_ok: Mapped[int] = mapped_column(Integer, default=0)
     pages_failed: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str | None] = mapped_column(Text)  # 'ok'|'partial'|'failed'
+
+
+class OpenDay(Base):
+    """День открытых дверей вуза (парсится с /vuzu/{slug}/dod)."""
+
+    __tablename__ = "open_day"
+    __table_args__ = (Index("ix_open_day_univ", "university_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    university_id: Mapped[int] = mapped_column(ForeignKey("university.id"))
+    starts_at: Mapped[datetime] = mapped_column(DateTime)
+    title: Mapped[str] = mapped_column(Text)
+    location: Mapped[str | None] = mapped_column(Text)
+    scraped_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    university: Mapped["University"] = relationship(back_populates="open_days")
 
 
 class ChangeLog(Base):

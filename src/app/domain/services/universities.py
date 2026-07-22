@@ -46,7 +46,7 @@ async def university_by_id(session: AsyncSession, univ_id: int) -> m.University 
     return (
         await session.execute(
             select(m.University)
-            .options(selectinload(m.University.faculties))
+            .options(selectinload(m.University.faculties), selectinload(m.University.open_days))
             .where(m.University.id == univ_id)
         )
     ).scalar_one_or_none()

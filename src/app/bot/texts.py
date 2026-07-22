@@ -1,10 +1,20 @@
 """Форматирование карточек. Telegram-специфика (HTML, лимит 4096) живёт только здесь."""
 
+from datetime import datetime
 from html import escape
 
 from app.db import models as m
 from app.domain.services.profile import STATUS_EMOJI, STATUS_WORD
 from app.scraper.schemas import FORM_RU, LEVEL_RU
+
+_MONTHS_RU = [
+    "", "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+]
+
+
+def _fmt_datetime(dt: datetime) -> str:
+    return f"{dt.day} {_MONTHS_RU[dt.month]}, {dt:%H:%M}"
 
 MAIN_MENU = (
     "🎓 <b>Финашка-бот</b>\n\n"
@@ -86,6 +96,16 @@ def university_card(vuz: m.University) -> str:
         parts.append("\n<b>Структура вуза</b>\n" + "\n".join(f"· {escape(n)}" for n in names))
         if len(vuz.faculties) > 12:
             parts.append(f"…и ещё {len(vuz.faculties) - 12}")
+
+    upcoming = sorted(
+        (d for d in vuz.open_days if d.starts_at >= datetime.now()), key=lambda d: d.starts_at
+    )
+    if upcoming:
+        parts.append("\n📅 <b>Дни открытых дверей</b>")
+        for day in upcoming[:3]:
+            title = day.title if len(day.title) <= 90 else day.title[:89] + "…"
+            place = f" — {escape(day.location)}" if day.location else ""
+            parts.append(f"• {_fmt_datetime(day.starts_at)}: {escape(title)}{place}")
     return "\n".join(parts)
 
 

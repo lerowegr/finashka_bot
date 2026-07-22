@@ -1,5 +1,7 @@
 """DTO границы «сайт → наша система». Валидация здесь защищает БД от битых страниц."""
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 LEVEL_MAP = {"Бакалавриат": "bachelor", "Специалитет": "specialist"}
@@ -112,6 +114,12 @@ class ProgramCard(BaseModel):
 class ObshInfo(BaseModel):
     dorm: str | None = None  # 'yes' | 'not_all' | 'no'
     dorm_rating: float | None = Field(default=None, ge=0, le=10)
+
+
+class OpenDayInfo(BaseModel):
+    starts_at: datetime
+    title: str
+    location: str | None = None
 
 
 class NpAggregates(BaseModel):

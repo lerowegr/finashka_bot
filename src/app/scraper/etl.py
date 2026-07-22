@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import models as m
@@ -16,8 +16,9 @@ from app.scraper.parsers.program_card import parse_program_card
 from app.scraper.parsers.programs_list import parse_program_cards
 from app.scraper.parsers.sitemap import parse_sitemap
 from app.scraper.parsers.vuz_about import parse_vuz_about
+from app.scraper.parsers.vuz_dod import parse_vuz_dod
 from app.scraper.parsers.vuz_obsh import parse_vuz_obsh
-from app.scraper.schemas import ProgramSummary, VuzAbout
+from app.scraper.schemas import OpenDayInfo, ProgramSummary, VuzAbout
 
 log = logging.getLogger(__name__)
 
@@ -79,7 +80,12 @@ class Etl:
     # ---------- upsert одного вуза ----------
 
     async def _upsert_vuz(
-        self, about: VuzAbout, dorm, programs: list[ProgramSummary], run_id: int
+        self,
+        about: VuzAbout,
+        dorm,
+        programs: list[ProgramSummary],
+        open_days: list[OpenDayInfo],
+        run_id: int,
     ) -> None:
         now = datetime.now()
         async with session_factory() as session:
@@ -118,6 +124,19 @@ class Etl:
             vuz.is_active = True
             vuz.scraped_at = now
             await session.flush()
+
+            # дни открытых дверей: заменяем целиком (сайт отдаёт только предстоящие)
+            await session.execute(delete(m.OpenDay).where(m.OpenDay.university_id == vuz.id))
+            for day in open_days:
+                session.add(
+                    m.OpenDay(
+                        university_id=vuz.id,
+                        starts_at=day.starts_at,
+                        title=day.title,
+                        location=day.location,
+                        scraped_at=now,
+                    )
+                )
 
             faculty_ids: dict[str, int] = {}
             existing_fac = (
@@ -264,7 +283,7 @@ class Etl:
     # ---------- обходы ----------
 
     async def run_light(self, limit_vuz: int | None = None) -> int:
-        """Вузы: about + общежитие + список программ. ~3 запроса на вуз."""
+        """Вузы: about + общежитие + список программ + дни открытых дверей. ~4 запроса на вуз."""
         run_id = await self._start_run("light")
         ok = failed = 0
         try:
@@ -278,9 +297,13 @@ class Etl:
                     programs = parse_program_cards(
                         await self.client.get(f"/vuzu/{slug}/proxodnoi")
                     )
-                    await self._upsert_vuz(about, dorm, programs, run_id)
+                    open_days = parse_vuz_dod(await self.client.get(f"/vuzu/{slug}/dod"))
+                    await self._upsert_vuz(about, dorm, programs, open_days, run_id)
                     ok += 1
-                    log.info("[%d/%d] %s: %d программ", i, len(slugs), slug, len(programs))
+                    log.info(
+                        "[%d/%d] %s: %d программ, %d ДОД",
+                        i, len(slugs), slug, len(programs), len(open_days),
+                    )
                 except (ValidationError, Exception) as exc:  # noqa: BLE001
                     failed += 1
                     log.exception("вуз %s пропущен: %s", slug, exc)
