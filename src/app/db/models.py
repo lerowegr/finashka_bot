@@ -54,6 +54,7 @@ class University(Base):
     region: Mapped["Region | None"] = relationship(lazy="joined")
     faculties: Mapped[list["Faculty"]] = relationship(back_populates="university")
     open_days: Mapped[list["OpenDay"]] = relationship(back_populates="university")
+    directions: Mapped[list["UniversityDirection"]] = relationship(back_populates="university")
 
 
 class Faculty(Base):
@@ -104,6 +105,19 @@ class Direction(Base):
     scraped_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     ugsn: Mapped["Ugsn"] = relationship(lazy="joined")
+
+
+class UniversityDirection(Base):
+    """Полный перечень направлений вуза (из /about). Направление в вузе — один раз."""
+
+    __tablename__ = "university_direction"
+
+    university_id: Mapped[int] = mapped_column(ForeignKey("university.id"), primary_key=True)
+    direction_id: Mapped[int] = mapped_column(ForeignKey("direction.id"), primary_key=True)
+    scraped_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    university: Mapped["University"] = relationship(back_populates="directions")
+    direction: Mapped["Direction"] = relationship(lazy="joined")
 
 
 class Program(Base):

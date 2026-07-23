@@ -62,14 +62,29 @@ def etl_light(limit: int | None = typer.Option(None, help="Обойти толь
     _run(Etl().run_light(limit_vuz=limit))
 
 
+_REGION_ALIASES = {
+    "moscow": "москва",
+    "msk": "москва",
+    "spb": "санкт-петербург",
+    "piter": "санкт-петербург",
+    "kazan": "казань",
+    "ekb": "екатеринбург",
+    "nsk": "новосибирск",
+}
+
+
 @etl_app.command("region")
 def etl_region(
-    city: str = typer.Argument(..., help="Слаг региона, напр. moscow, spb, kazan")
+    region: str = typer.Argument(..., help="Регион: moscow, spb или часть названия, напр. москва")
 ) -> None:
-    """Обойти только вузы одного региона (moscow, spb, ekaterinburg, kazan …)."""
+    """Надёжный обход одного региона (проверяет все вузы, отбирает по региону).
+
+    Принимает алиасы (moscow, spb, kazan…) или часть названия региона.
+    """
     from app.scraper.etl import Etl
 
-    _run(Etl().run_region(city))
+    query = _REGION_ALIASES.get(region.lower(), region)
+    _run(Etl().run_region(query))
 
 
 @etl_app.command("np")

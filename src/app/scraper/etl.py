@@ -4,14 +4,13 @@ import logging
 from datetime import datetime
 
 from pydantic import ValidationError
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import models as m
 from app.db.engine import session_factory
 from app.notify import notify_admin
 from app.scraper.client import SiteClient
-from app.scraper.parsers.city import parse_city_slugs
 from app.scraper.parsers.np_page import parse_np_page
 from app.scraper.parsers.program_card import parse_program_card
 from app.scraper.parsers.programs_list import parse_program_cards
@@ -157,8 +156,10 @@ class Etl:
                     await session.flush()
                     faculty_ids[name] = fac.id
 
-            # справочники УГСН/направлений пополняются от каждого вуза
+            # справочники УГСН/направлений пополняются от каждого вуза;
+            # заодно пишем полный перечень направлений вуза (university_direction)
             code_to_dir: dict[str, int] = {}
+            about_direction_ids: set[int] = set()
             for ref in about.directions:
                 ugsn_code = ref.code[:2] + ".00.00"
                 ugsn = await session.get(m.Ugsn, ugsn_code)
@@ -185,6 +186,31 @@ class Etl:
                     session.add(direction)
                     await session.flush()
                 code_to_dir[ref.code] = direction.id
+                about_direction_ids.add(direction.id)
+
+                if await session.get(m.UniversityDirection, (vuz.id, direction.id)) is None:
+                    session.add(
+                        m.UniversityDirection(
+                            university_id=vuz.id, direction_id=direction.id, scraped_at=now
+                        )
+                    )
+                else:
+                    await session.execute(
+                        update(m.UniversityDirection)
+                        .where(
+                            m.UniversityDirection.university_id == vuz.id,
+                            m.UniversityDirection.direction_id == direction.id,
+                        )
+                        .values(scraped_at=now)
+                    )
+
+            # направления, исчезнувшие со страницы /about, отвязываем от вуза
+            await session.execute(
+                delete(m.UniversityDirection).where(
+                    m.UniversityDirection.university_id == vuz.id,
+                    m.UniversityDirection.direction_id.not_in(about_direction_ids or {-1}),
+                )
+            )
 
             seen_program_ids: set[int] = set()
             for summary in programs:
@@ -283,18 +309,60 @@ class Etl:
 
     # ---------- обходы ----------
 
-    async def run_region(self, city_slug: str) -> int:
-        """Обойти только вузы одного региона (список берём со страницы /city/{slug})."""
-        html = await self.client.get(f"/city/{city_slug}")
-        slugs = parse_city_slugs(html)
-        if not slugs:
-            log.warning("на странице /city/%s не найдено вузов", city_slug)
-        else:
-            log.info("регион %s: %d вузов — %s", city_slug, len(slugs), ", ".join(slugs))
-        return await self.run_light(slugs=slugs)
+    async def _crawl_vuz_with_about(self, slug: str, about: VuzAbout, run_id: int) -> tuple[int, int]:
+        """Глубокий обход вуза при уже загруженном /about: общежитие, ДОД и полный
+        список профилей по каждому направлению (/proxodnoi?{np_id})."""
+        dorm = parse_vuz_obsh(await self.client.get(f"/vuzu/{slug}/obsh"))
+        open_days = parse_vuz_dod(await self.client.get(f"/vuzu/{slug}/dod"))
+
+        programs: list[ProgramSummary] = []
+        for ref in about.directions:
+            html = await self.client.get(f"/vuzu/{slug}/proxodnoi?{ref.np_id}")
+            programs.extend(parse_program_cards(html))
+
+        await self._upsert_vuz(about, dorm, programs, open_days, run_id)
+        return len(programs), len(about.directions)
+
+    async def _crawl_vuz(self, slug: str, run_id: int) -> tuple[int, int]:
+        about = parse_vuz_about(await self.client.get(f"/vuzu/{slug}/about"), slug)
+        return await self._crawl_vuz_with_about(slug, about, run_id)
+
+    async def run_region(self, region_query: str) -> int:
+        """Надёжный обход региона: скан всех вузов из sitemap, фильтр по региону
+        со страницы /about, глубокий обход только совпавших."""
+        run_id = await self._start_run("region")
+        ok = failed = skipped = 0
+        needle = region_query.lower()
+        try:
+            index = parse_sitemap(await self.client.get("/map/sitemap.php"))
+            log.info(
+                "обход региона «%s»: проверяю %d вузов из sitemap", region_query, len(index.vuz_slugs)
+            )
+            for slug in index.vuz_slugs:
+                try:
+                    about = parse_vuz_about(await self.client.get(f"/vuzu/{slug}/about"), slug)
+                    if needle not in (about.region_name or "").lower():
+                        skipped += 1
+                        continue
+                    n_prog, n_dir = await self._crawl_vuz_with_about(slug, about, run_id)
+                    ok += 1
+                    log.info(
+                        "[%d] %s (%s): %d направлений, %d профилей",
+                        ok, slug, about.short_name, n_dir, n_prog,
+                    )
+                except (ValidationError, Exception):  # noqa: BLE001
+                    failed += 1
+                    log.exception("вуз %s пропущен", slug)
+        finally:
+            await self._finish_run(run_id, ok, failed)
+        log.info(
+            "регион «%s»: обойдено %d, пропущено (другой регион) %d, ошибок %d",
+            region_query, ok, skipped, failed,
+        )
+        return run_id
 
     async def run_light(self, limit_vuz: int | None = None, slugs: list[str] | None = None) -> int:
-        """Вузы: about + общежитие + список программ + дни открытых дверей. ~4 запроса на вуз.
+        """Полный обход вузов: about + общежитие + ДОД + все профили по направлениям.
 
         Если slugs не задан — обходим все вузы из sitemap (с учётом limit_vuz).
         """
@@ -307,17 +375,10 @@ class Etl:
             log.info("light-обход: %d вузов", len(slugs))
             for i, slug in enumerate(slugs, 1):
                 try:
-                    about = parse_vuz_about(await self.client.get(f"/vuzu/{slug}/about"), slug)
-                    dorm = parse_vuz_obsh(await self.client.get(f"/vuzu/{slug}/obsh"))
-                    programs = parse_program_cards(
-                        await self.client.get(f"/vuzu/{slug}/proxodnoi")
-                    )
-                    open_days = parse_vuz_dod(await self.client.get(f"/vuzu/{slug}/dod"))
-                    await self._upsert_vuz(about, dorm, programs, open_days, run_id)
+                    n_prog, n_dir = await self._crawl_vuz(slug, run_id)
                     ok += 1
                     log.info(
-                        "[%d/%d] %s: %d программ, %d ДОД",
-                        i, len(slugs), slug, len(programs), len(open_days),
+                        "[%d/%d] %s: %d направлений, %d профилей", i, len(slugs), slug, n_dir, n_prog
                     )
                 except (ValidationError, Exception) as exc:  # noqa: BLE001
                     failed += 1
