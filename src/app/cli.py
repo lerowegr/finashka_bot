@@ -62,6 +62,16 @@ def etl_light(limit: int | None = typer.Option(None, help="Обойти толь
     _run(Etl().run_light(limit_vuz=limit))
 
 
+@etl_app.command("region")
+def etl_region(
+    city: str = typer.Argument(..., help="Слаг региона, напр. moscow, spb, kazan")
+) -> None:
+    """Обойти только вузы одного региона (moscow, spb, ekaterinburg, kazan …)."""
+    from app.scraper.etl import Etl
+
+    _run(Etl().run_region(city))
+
+
 @etl_app.command("np")
 def etl_np(limit: int | None = typer.Option(None)) -> None:
     """Агрегаты направлений (~5 мин)."""

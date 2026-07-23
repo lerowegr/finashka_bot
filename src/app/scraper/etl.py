@@ -11,6 +11,7 @@ from app.db import models as m
 from app.db.engine import session_factory
 from app.notify import notify_admin
 from app.scraper.client import SiteClient
+from app.scraper.parsers.city import parse_city_slugs
 from app.scraper.parsers.np_page import parse_np_page
 from app.scraper.parsers.program_card import parse_program_card
 from app.scraper.parsers.programs_list import parse_program_cards
@@ -282,13 +283,27 @@ class Etl:
 
     # ---------- обходы ----------
 
-    async def run_light(self, limit_vuz: int | None = None) -> int:
-        """Вузы: about + общежитие + список программ + дни открытых дверей. ~4 запроса на вуз."""
+    async def run_region(self, city_slug: str) -> int:
+        """Обойти только вузы одного региона (список берём со страницы /city/{slug})."""
+        html = await self.client.get(f"/city/{city_slug}")
+        slugs = parse_city_slugs(html)
+        if not slugs:
+            log.warning("на странице /city/%s не найдено вузов", city_slug)
+        else:
+            log.info("регион %s: %d вузов — %s", city_slug, len(slugs), ", ".join(slugs))
+        return await self.run_light(slugs=slugs)
+
+    async def run_light(self, limit_vuz: int | None = None, slugs: list[str] | None = None) -> int:
+        """Вузы: about + общежитие + список программ + дни открытых дверей. ~4 запроса на вуз.
+
+        Если slugs не задан — обходим все вузы из sitemap (с учётом limit_vuz).
+        """
         run_id = await self._start_run("light")
         ok = failed = 0
         try:
-            index = parse_sitemap(await self.client.get("/map/sitemap.php"))
-            slugs = index.vuz_slugs[:limit_vuz] if limit_vuz else index.vuz_slugs
+            if slugs is None:
+                index = parse_sitemap(await self.client.get("/map/sitemap.php"))
+                slugs = index.vuz_slugs[:limit_vuz] if limit_vuz else index.vuz_slugs
             log.info("light-обход: %d вузов", len(slugs))
             for i, slug in enumerate(slugs, 1):
                 try:
