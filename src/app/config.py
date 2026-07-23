@@ -35,5 +35,18 @@ class Settings(BaseSettings):
             return None
         return value
 
+    @field_validator("db_url")
+    @classmethod
+    def _absolutize_sqlite(cls, value: str) -> str:
+        # относительный путь к SQLite в .env (data/bot.db) делаем абсолютным от корня
+        # проекта, чтобы бот работал независимо от рабочей папки запуска
+        marker = ":///"
+        if value.startswith("sqlite") and marker in value:
+            scheme, path_part = value.split(marker, 1)
+            if path_part and not Path(path_part).is_absolute():
+                abs_path = (BASE_DIR / path_part).resolve().as_posix()
+                return f"{scheme}{marker}{abs_path}"
+        return value
+
 
 settings = Settings()
