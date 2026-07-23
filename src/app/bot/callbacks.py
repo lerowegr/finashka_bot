@@ -57,9 +57,18 @@ class VuzCb(CallbackData, prefix="vz"):
     univ_id: int
 
 
-class VuzProgsCb(CallbackData, prefix="vp"):
+class VuzDirsCb(CallbackData, prefix="vd"):
+    """Список направлений вуза (каждое один раз)."""
+
     univ_id: int
     page: int
+
+
+class VuzDirCb(CallbackData, prefix="vdd"):
+    """Профили одного направления в конкретном вузе."""
+
+    univ_id: int
+    dir_id: int
 
 
 class ProgCb(CallbackData, prefix="pg"):

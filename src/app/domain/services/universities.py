@@ -52,24 +52,58 @@ async def university_by_id(session: AsyncSession, univ_id: int) -> m.University 
     ).scalar_one_or_none()
 
 
-async def university_programs_page(
+async def university_directions_page(
     session: AsyncSession, univ_id: int, page: int, per_page: int = 8
-) -> tuple[list[m.Program], int]:
-    base = select(m.Program).where(m.Program.university_id == univ_id, m.Program.is_active)
+) -> tuple[list[tuple[m.Direction, int]], int]:
+    """Направления вуза (каждое один раз) с числом профилей."""
     total = (
-        await session.execute(select(func.count()).select_from(base.subquery()))
+        await session.execute(
+            select(func.count())
+            .select_from(m.UniversityDirection)
+            .where(m.UniversityDirection.university_id == univ_id)
+        )
     ).scalar_one()
-    items = (
+
+    profiles = (
+        select(
+            m.Program.direction_id.label("did"),
+            func.count(m.Program.id).label("cnt"),
+        )
+        .where(m.Program.university_id == univ_id, m.Program.is_active)
+        .group_by(m.Program.direction_id)
+        .subquery()
+    )
+    rows = (
+        await session.execute(
+            select(m.Direction, func.coalesce(profiles.c.cnt, 0))
+            .join(m.UniversityDirection, m.UniversityDirection.direction_id == m.Direction.id)
+            .outerjoin(profiles, profiles.c.did == m.Direction.id)
+            .where(m.UniversityDirection.university_id == univ_id)
+            .order_by(m.Direction.code)
+            .offset(page * per_page)
+            .limit(per_page)
+        )
+    ).all()
+    return [(direction, count) for direction, count in rows], total
+
+
+async def vuz_direction_programs(
+    session: AsyncSession, univ_id: int, direction_id: int
+) -> list[m.Program]:
+    """Профили одного направления в конкретном вузе."""
+    return (
         (
             await session.execute(
-                base.options(selectinload(m.Program.forms))
-                .join(m.Direction, m.Program.direction_id == m.Direction.id)
-                .order_by(m.Direction.code)
-                .offset(page * per_page)
-                .limit(per_page)
+                select(m.Program)
+                .options(selectinload(m.Program.forms))
+                .where(
+                    m.Program.university_id == univ_id,
+                    m.Program.direction_id == direction_id,
+                    m.Program.is_active,
+                )
+                .order_by(m.Program.profile)
             )
         )
         .scalars()
         .all()
     )
-    return items, total

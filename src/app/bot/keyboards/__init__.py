@@ -26,7 +26,8 @@ from app.bot.callbacks import (
     SubjToggleCb,
     UgsnCb,
     VuzCb,
-    VuzProgsCb,
+    VuzDirCb,
+    VuzDirsCb,
 )
 from app.db import models as m
 
@@ -277,7 +278,8 @@ def university_card_kb(university: m.University, is_fav: bool) -> InlineKeyboard
     kb = InlineKeyboardBuilder()
     kb.row(
         InlineKeyboardButton(
-            text="📚 Программы вуза", callback_data=VuzProgsCb(univ_id=university.id, page=0).pack()
+            text="🎓 Направления вуза",
+            callback_data=VuzDirsCb(univ_id=university.id, page=0).pack(),
         )
     )
     kb.row(
@@ -296,6 +298,43 @@ def university_card_kb(university: m.University, is_fav: bool) -> InlineKeyboard
                 callback_data=RegionCb(region_id=university.region_id, page=0).pack(),
             )
         )
+    kb.row(_home())
+    return kb.as_markup()
+
+
+def vuz_directions_kb(
+    items: list[tuple[m.Direction, int]], page: int, total: int, univ_id: int
+) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for direction, count in items:
+        suffix = f" · {count} проф." if count else ""
+        kb.row(
+            InlineKeyboardButton(
+                text=f"{direction.code} {direction.name}{suffix}",
+                callback_data=VuzDirCb(univ_id=univ_id, dir_id=direction.id).pack(),
+            )
+        )
+    _pager(kb, lambda p: VuzDirsCb(univ_id=univ_id, page=p), page, total)
+    kb.row(InlineKeyboardButton(text="◀ К вузу", callback_data=VuzCb(univ_id=univ_id).pack()))
+    kb.row(_home())
+    return kb.as_markup()
+
+
+def vuz_direction_profiles_kb(programs: list[m.Program], univ_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for program in programs:
+        label = program.profile or "Без профиля"
+        score = next((f" · {f.pass_score}" for f in program.forms if f.pass_score), "")
+        kb.row(
+            InlineKeyboardButton(
+                text=f"{label}{score}", callback_data=ProgCb(prog_id=program.id).pack()
+            )
+        )
+    kb.row(
+        InlineKeyboardButton(
+            text="◀ К направлениям", callback_data=VuzDirsCb(univ_id=univ_id, page=0).pack()
+        )
+    )
     kb.row(_home())
     return kb.as_markup()
 

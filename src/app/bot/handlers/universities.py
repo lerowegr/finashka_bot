@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot import texts
-from app.bot.callbacks import MenuCb, RegionCb, RegionsCb, VuzCb, VuzProgsCb
+from app.bot.callbacks import MenuCb, RegionCb, RegionsCb, VuzCb, VuzDirCb, VuzDirsCb
 from app.bot.keyboards import REGIONS_PER_PAGE
-from app.domain.services import favorites, universities
+from app.domain.services import catalog, favorites, universities
 
 router = Router(name="universities")
 
@@ -63,25 +63,39 @@ async def show_vuz(callback: CallbackQuery, callback_data: VuzCb, session: Async
     await callback.answer()
 
 
-@router.callback_query(VuzProgsCb.filter())
-async def show_vuz_programs(callback: CallbackQuery, callback_data: VuzProgsCb, session: AsyncSession) -> None:
-    items, total = await universities.university_programs_page(
+@router.callback_query(VuzDirsCb.filter())
+async def show_vuz_directions(callback: CallbackQuery, callback_data: VuzDirsCb, session: AsyncSession) -> None:
+    items, total = await universities.university_directions_page(
         session, callback_data.univ_id, callback_data.page
     )
     if not items and callback_data.page == 0:
-        await callback.answer("У вуза пока нет программ в базе", show_alert=True)
+        await callback.answer("У вуза пока нет направлений в базе", show_alert=True)
         return
-
-    def page_cb(page: int) -> VuzProgsCb:
-        return VuzProgsCb(univ_id=callback_data.univ_id, page=page)
-
-    def label(program) -> str:
-        return f"{program.direction.code} {program.direction.name}"
-
     await callback.message.edit_text(
-        "Программы вуза:",
-        reply_markup=kb.programs_list_kb(
-            items, callback_data.page, total, page_cb, VuzCb(univ_id=callback_data.univ_id), label
-        ),
+        "🎓 Направления вуза (нажмите — покажу профили):",
+        reply_markup=kb.vuz_directions_kb(items, callback_data.page, total, callback_data.univ_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(VuzDirCb.filter())
+async def show_vuz_direction_profiles(callback: CallbackQuery, callback_data: VuzDirCb, session: AsyncSession) -> None:
+    programs = await universities.vuz_direction_programs(
+        session, callback_data.univ_id, callback_data.dir_id
+    )
+    if not programs:
+        await callback.answer(
+            "Профили этого направления пока не загружены", show_alert=True
+        )
+        return
+    direction = await catalog.direction_by_id(session, callback_data.dir_id)
+    header = (
+        f"🎓 <b>{direction.name}</b> ({direction.code})\nПрофили в этом вузе:"
+        if direction
+        else "Профили:"
+    )
+    await callback.message.edit_text(
+        header,
+        reply_markup=kb.vuz_direction_profiles_kb(programs, callback_data.univ_id),
     )
     await callback.answer()
